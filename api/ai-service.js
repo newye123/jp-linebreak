@@ -18,8 +18,16 @@
 //
 // いまは両方とも「無い」を「無い」として返す。UI 側は null を扱う。
 
-const dotenv = require('dotenv')
-dotenv.config()
+// dotenv 是「可选」的：装了就从 .env 读，没装就直接用环境变量。
+// 这不是偷懒 —— 这一层里的 normalizeAIResult / salvageResult 是纯函数，
+// 不该因为一个读文件的依赖没装就 require 不进来。
+// CI 故意不跑 npm install（核心零依赖是卖点），如果这里硬 require，
+// 纯函数测试会在 CI 上整个文件崩掉 —— 第一版就是这样，四路全红。
+try {
+  require('dotenv').config()
+} catch (_) {
+  /* 没装 dotenv：环境变量由调用方直接提供 */
+}
 
 const MODEL = 'gemini-2.0-flash'
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`
