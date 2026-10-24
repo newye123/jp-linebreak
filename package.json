@@ -1,0 +1,24 @@
+{
+  "name": "jp-linebreak",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Japanese line breaking with kinsoku (行頭禁則/行末禁則) handling, plus a checker that can actually fail",
+  "license": "NC-1.0",
+  "main": "plugin/lib/segmenter.js",
+  "scripts": {
+    "test": "node --test",
+    "check": "node tools/check-kinsoku.js fixtures/after.txt",
+    "start:api": "node api/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "japanese",
+    "line-break",
+    "kinsoku",
+    "typography",
+    "禁則処理",
+    "組版"
+  ]
+}

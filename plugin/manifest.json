@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "JP Layout Helper",
+  "version": "0.2.0",
+  "description": "Browser extension to assist with multi-language line breaking and layout for web content.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://localhost:3000/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ]
+    }
+  ]
+}

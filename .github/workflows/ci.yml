@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: ['20', '22']
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: 基线（必须绿）
+        run: |
+          node --test
+          node tools/check-kinsoku.js fixtures/after.txt
+
+      - name: 负控 1 —— 检查器必须红
+        # 往 fixtures/after.txt 塞一行行首是「。」的文本。
+        # 如果检查器还返回 0，说明它不会红，这个仓库的核心主张就不成立。
+        run: |
+          python - <<'PY'
+          import io
+          io.open('fixtures/after.txt', 'w', encoding='utf-8', newline='\n').write('これは大丈夫です。\n。これは行頭禁則違反です。\n')
+          PY
+          set +e
+          node tools/check-kinsoku.js fixtures/after.txt
+          rc=$?
+          set -e
+          echo "检查器退出码: $rc"
+          if [ "$rc" != "1" ]; then
+            echo "负控失败：注入违规之后检查器没有返回 1（返回了 $rc）"
+            exit 1
+          fi
+
+      - name: 负控 2 —— 断行器必须红
+        # 把禁则调整幅度改成 0，等于关掉追い込み／追い出し。
+        # 如果测试还全绿，说明那些断言根本没在检查禁则。
+        run: |
+          python - <<'PY'
+          import io
+          p = 'plugin/lib/segmenter.js'
+          s = io.open(p, encoding='utf-8').read()
+          assert 'maxAdjust: 3' in s, '找不到 maxAdjust 默认值，负控无法注入'
+          io.open(p, 'w', encoding='utf-8', newline='\n').write(s.replace('maxAdjust: 3', 'maxAdjust: 0'))
+          PY
+          set +e
+          node --test
+          rc=$?
+          set -e
+          echo "测试退出码: $rc"
+          if [ "$rc" = "0" ]; then
+            echo "负控失败：关掉禁则调整之后测试仍然全绿"
+            exit 1
+          fi
+
+      - name: 负控 3 —— 探针失灵必须是 2，不能是 0
+        # 空文件 = 一行都没检查。返回 0 会把「没读到东西」读成「干净」。
+        run: |
+          printf '\n\n\n' > empty.txt
+          set +e
+          node tools/check-kinsoku.js empty.txt
+          rc=$?
+          set -e
+          echo "空文件退出码: $rc"
+          rm -f empty.txt
+          if [ "$rc" != "2" ]; then
+            echo "负控失败：空文件返回了 $rc，应该是 2"
+            exit 1
+          fi
+
+      - name: 还原并校验
+        run: |
+          git checkout -- fixtures/after.txt plugin/lib/segmenter.js
+          python - <<'PY'
+          import hashlib, subprocess, sys
+          files = ['fixtures/after.txt', 'plugin/lib/segmenter.js']
+          for f in files:
+              disk = hashlib.sha256(open(f, 'rb').read()).hexdigest()
+              committed = subprocess.check_output(['git', 'show', 'HEAD:' + f])
+              head = hashlib.sha256(committed).hexdigest()
+              print(f, disk[:16], head[:16])
+              if disk != head:
+                  sys.exit('还原后内容与提交不一致: ' + f)
+          PY
+
+      - name: 还原后基线必须再次绿
+        run: |
+          node --test
+          node tools/check-kinsoku.js fixtures/after.txt
+
+      - name: 工作区必须干净
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "负控留下了残留文件："
+            git status --porcelain
+            exit 1
+          fi
